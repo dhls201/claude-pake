@@ -1,0 +1,87 @@
+name: Build Claude with Pake
+
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: "Target URL"
+        required: true
+        default: "https://claude.ai/"
+      app_name:
+        description: "App name"
+        required: true
+        default: "Claude"
+      safe_domain:
+        description: "Domains kept inside the app (comma separated)"
+        required: false
+        default: "claude.ai,anthropic.com,google.com,googleusercontent.com"
+      hide_title_bar:
+        description: "Immersive title bar (macOS)"
+        type: boolean
+        required: false
+        default: true
+      width:
+        description: "Window width"
+        required: false
+        default: "1280"
+      height:
+        description: "Window height"
+        required: false
+        default: "860"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: cargo-pake-claude-${{ github.run_id }}
+          restore-keys: cargo-pake-claude-
+
+      - name: Install pnpm and pake-cli
+        run: |
+          npm install -g pnpm pake-cli
+          pake --version
+
+      - name: Build Claude (.app bundle)
+        env:
+          PAKE_CREATE_APP: "1"
+        run: |
+          ARGS=("${{ inputs.url }}" "--name" "${{ inputs.app_name }}" "--new-window")
+          if [ -n "${{ inputs.safe_domain }}" ]; then ARGS+=("--safe-domain" "${{ inputs.safe_domain }}"); fi
+          if [ "${{ inputs.hide_title_bar }}" = "true" ]; then ARGS+=("--hide-title-bar"); fi
+          if [ -n "${{ inputs.width }}" ]; then ARGS+=("--width" "${{ inputs.width }}"); fi
+          if [ -n "${{ inputs.height }}" ]; then ARGS+=("--height" "${{ inputs.height }}"); fi
+          echo "Running: pake ${ARGS[*]}"
+          pake "${ARGS[@]}"
+
+      - name: Locate build outputs
+        run: |
+          echo "=== cwd: $(pwd) ==="
+          ls -la
+          find . -maxdepth 4 \( -name '*.app' -o -name '*.dmg' \) -print
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Claude-macos-app
+          path: |
+            *.app
+            *.dmg
+          if-no-files-found: error
