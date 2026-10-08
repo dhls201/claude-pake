@@ -1,0 +1,59 @@
+name: Build Claude (debug)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: cargo-pake-claude-debug-${{ github.run_id }}
+          restore-keys: cargo-pake-claude-
+
+      - name: Install pnpm and pake-cli
+        run: |
+          npm install -g pnpm pake-cli
+          pake --version
+
+      - name: Build Claude (debug, Safari UA)
+        env:
+          PAKE_CREATE_APP: "1"
+        run: |
+          pake "https://claude.ai/" \
+            --name "Claude" \
+            --new-window \
+            --safe-domain "claude.ai,anthropic.com,google.com,googleusercontent.com" \
+            --hide-title-bar \
+            --width 1280 --height 860 \
+            --debug \
+            --user-agent "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.6 Safari/605.1.15"
+
+      - name: Locate outputs
+        run: find . -maxdepth 4 \( -name '*.app' -o -name '*.dmg' \) -print
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: Claude-debug-app
+          path: |
+            *.app
+            *.dmg
+          if-no-files-found: error
